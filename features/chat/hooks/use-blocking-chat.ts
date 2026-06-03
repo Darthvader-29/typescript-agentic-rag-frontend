@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { sendMessage } from "@/features/chat/api/chat.api";
 import { useChatStore, createMessage } from "@/features/chat/store/chat.store";
 import { isApiError } from "@/lib/api/api-error";
+import { SseErrorSchema } from "@/features/chat/api/chat.schemas";
 import type { ChatResponse } from "@/features/chat/api/chat.schemas";
 import type { Source } from "@/types";
 
@@ -23,6 +24,18 @@ function synthSources(count: number): Source[] {
   }));
 }
 
+/**
+ * Pull the machine-readable error `code` (docs/09 §3, e.g. "free_tier_exhausted") off a
+ * failed request. On the blocking path the free-tier guard arrives as an HTTP 4xx whose
+ * JSON body `{detail, code}` the http-client stashes on `ApiError.payload` — parse it back
+ * out so the BYOK CTA can key off `errorCode`. Returns undefined for a generic error.
+ */
+function errorCodeOf(err: unknown): string | undefined {
+  if (!isApiError(err)) return undefined;
+  const parsed = SseErrorSchema.safeParse(err.payload);
+  return parsed.success ? parsed.data.code : undefined;
+}
+
 export function useBlockingChat() {
   const addMessage = useChatStore((s) => s.addMessage);
   const appendContent = useChatStore((s) => s.appendContent);
@@ -31,6 +44,7 @@ export function useBlockingChat() {
   const setRoute = useChatStore((s) => s.setRoute);
   const setSourcesCount = useChatStore((s) => s.setSourcesCount);
   const setStatus = useChatStore((s) => s.setStatus);
+  const setErrorCode = useChatStore((s) => s.setErrorCode);
   const finalize = useChatStore((s) => s.finalize);
   const setLoading = useChatStore((s) => s.setLoading);
 
@@ -77,6 +91,8 @@ export function useBlockingChat() {
           : "The AI service returned an error. Please try again later.";
       appendContent(assistantId, message);
       setRoute(assistantId, "ERROR");
+      // Capture the machine-readable code (free_tier_exhausted etc.) so the BYOK CTA fires.
+      setErrorCode(assistantId, errorCodeOf(err));
       setStatus(assistantId, "error");
     },
 

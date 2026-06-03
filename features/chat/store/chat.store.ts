@@ -26,6 +26,8 @@ interface ChatState {
   addComponent: (id: string, component: RichComponent) => void;
   setStatus: (id: string, status: MessageStatus) => void;
   setRoute: (id: string, route: RouteType) => void;
+  /** Record the backend error code (e.g. "free_tier_exhausted") on a failed turn. */
+  setErrorCode: (id: string, code: string | undefined) => void;
   /** Flip status to "done" and optionally apply a partial patch (e.g. overwrite content with done.answer). */
   finalize: (id: string, patch?: Partial<Message>) => void;
   /** Returns the most-recent user message; used by the retry callback. */
@@ -121,6 +123,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setRoute: (id, route) =>
     set((s) => ({
       messages: updateMessage(s.messages, id, (m) => ({ ...m, route })),
+    })),
+
+  setErrorCode: (id, errorCode) =>
+    set((s) => ({
+      messages: updateMessage(s.messages, id, (m) => ({ ...m, errorCode })),
     })),
 
   finalize: (id, patch) =>

@@ -13,6 +13,8 @@ import { Sidebar } from "@/components/chat/sidebar";
 import { ChatInput } from "@/components/chat/chat-input";
 import { EmptyState } from "@/components/chat/empty-state";
 import { MessageList } from "@/features/chat/components/message-list";
+import { FreeTierBanner } from "@/features/keys/components/free-tier-banner";
+import { FreeTierExhaustedDialog } from "@/features/keys/components/free-tier-exhausted-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
@@ -86,6 +88,12 @@ export function ChatScreen() {
             </Button>
           </div>
         )}
+
+        {/* Free-tier disclaimer — flag-gated; visible only to keyless users (M7). */}
+        <FreeTierBanner />
+
+        {/* BYOK upsell — opens when a turn fails with free_tier_exhausted (M7). Portals. */}
+        <FreeTierExhaustedDialog />
 
         <ScrollArea className="max-h-[calc(100vh-80px)] flex-1 p-4">
           <div className="mx-auto max-w-4xl space-y-6 pt-10 pb-10">

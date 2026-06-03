@@ -45,8 +45,10 @@ describe("useStreamingChat end-to-end", () => {
       "retrieving",
       "synthesizing",
     ]);
-    expect(assistant.sources).toEqual([]);
-    // Opaque component captured (dark in M2 — no renderer yet; rendered by M10).
+    // Sources are DERIVED from the citation component (09 §5: citation = sources channel).
+    expect(assistant.sources).toHaveLength(1);
+    expect(assistant.sources[0].title).toBe("doc.pdf · p.4");
+    // Opaque component ALSO captured for M10 rendering (storage is M9's job).
     expect(assistant.components).toHaveLength(1);
     expect(assistant.components![0].type).toBe("citation");
     expect(useChatStore.getState().isStreaming).toBe(false);

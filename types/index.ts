@@ -49,4 +49,11 @@ export interface Message {
   sourcesCount?: number;
   /** Stored on user messages so the retry function can re-send with the same web-search setting. */
   webSearchAllowed?: boolean;
+  /**
+   * Machine-readable backend error code (docs/09 §3), e.g. "free_tier_exhausted", captured
+   * when a turn fails with a typed code. Set by the streaming strategy on the error path
+   * (and surfaced on the blocking path) so M7's BYOK upsell CTA can key off it
+   * (`errorCode === "free_tier_exhausted"`). Undefined on a generic error or a success.
+   */
+  errorCode?: string;
 }

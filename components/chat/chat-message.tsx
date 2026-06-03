@@ -17,6 +17,8 @@ import { ThinkingSteps } from "@/features/chat/components/thinking-steps";
 import { SourcesPanel } from "@/features/chat/components/sources-panel";
 import { MessageActions } from "@/features/chat/components/message-actions";
 import { StreamingCaret } from "@/features/chat/components/streaming-caret";
+import { ComponentBlock } from "@/features/chat/components/rich/component-block";
+import { normalizeComponents } from "@/features/chat/components/rich/component.schemas";
 
 // Module-scope stable map — ReactMarkdown does not rebuild its renderer tree
 // on each streamed token (M9) or parent re-render.
@@ -65,6 +67,13 @@ function ChatMessageImpl({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
   const reduced = useReducedMotion();
   const isStreaming = message.status === "streaming";
+
+  // M10: a P6 `citation` block is the precise provenance channel. If one is present, suppress the
+  // generic synthesized sources panel for this message so provenance isn't shown twice (R7).
+  // normalizeComponents drops invalid blocks (defense-in-depth over the backend's own drop, §2.5).
+  const hasCitation = normalizeComponents(message.components).some(
+    (c) => c.type === "citation"
+  );
 
   return (
     <m.div
@@ -138,7 +147,19 @@ function ChatMessageImpl({ message }: ChatMessageProps) {
           )}
         </div>
 
-        {!isUser && (
+        {/* M10: rich component blocks, after the body. The flag is read INSIDE <ComponentBlock>
+            (R9), so this always renders the RAW (opaque) message.components — flag-off pretty-prints
+            them, flag-on validates+renders per spec. Invalid blocks drop inside the dispatcher. */}
+        {!isUser && message.components && message.components.length > 0 && (
+          <div className="space-y-1">
+            {message.components.map((spec, i) => (
+              <ComponentBlock key={i} spec={spec} index={i} />
+            ))}
+          </div>
+        )}
+
+        {/* Sources (M3) — suppressed when a P6 citation component already shows provenance (R7). */}
+        {!isUser && !hasCitation && (
           <SourcesPanel
             sources={message.sources}
             count={message.sourcesCount}
@@ -164,7 +185,10 @@ export const ChatMessage = React.memo(ChatMessageImpl, (prev, next) => {
     a.route === b.route &&
     a.sourcesCount === b.sourcesCount &&
     a.steps === b.steps &&
-    a.sources === b.sources
+    a.sources === b.sources &&
+    // M10 (R8): addComponent appends a NEW array reference (immutable update), so a late-arriving
+    // component block changes identity here and repaints. Without this it wouldn't render.
+    a.components === b.components
   );
 });
 ChatMessage.displayName = "ChatMessage";

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { api } from "@/features/chat/api/chat.api";
+import { ModelPicker } from "@/features/keys/components/model-picker";
 
 interface ChatInputProps {
   isLoading: boolean;
@@ -115,6 +116,9 @@ export function ChatInput({
                 {webSearch ? "Web search enabled" : "Web search disabled"}
               </TooltipContent>
             </Tooltip>
+
+            {/* BYOK provider/model picker — flag-gated; renders nothing when BYOK is off. */}
+            <ModelPicker />
           </div>
 
           <TextareaAutosize

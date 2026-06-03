@@ -5,14 +5,29 @@ const FeatureFlag = z
   .default("false")
   .transform((v) => v === "true");
 
+// Default-ON flags (M9 streaming, M7 BYOK, M10 rich components): the matching backend phase
+// is live, so these capabilities ship enabled. An operator can still keep one env-gated by
+// setting it to "false": STREAMING=false falls back to the blocking path (the useChat facade
+// switches strategies on the flag); BYOK=false hides the Settings route, picker, disclaimer,
+// and upsell (chat falls back to the free tier); RICH_COMPONENTS=false degrades each block to
+// a collapsed raw-JSON fallback.
+const FeatureFlagDefaultOn = z
+  .enum(["true", "false"])
+  .default("true")
+  .transform((v) => v === "true");
+
 const envSchema = z.object({
   NEXT_PUBLIC_API_URL: z.string().url().default("http://localhost:8000/api"),
 
-  NEXT_PUBLIC_FEATURE_STREAMING: FeatureFlag,
+  NEXT_PUBLIC_FEATURE_STREAMING: FeatureFlagDefaultOn,
   NEXT_PUBLIC_FEATURE_AUTH: FeatureFlag,
-  NEXT_PUBLIC_FEATURE_BYOK: FeatureFlag,
+  NEXT_PUBLIC_FEATURE_BYOK: FeatureFlagDefaultOn,
   NEXT_PUBLIC_FEATURE_PRESIGNED_UPLOAD: FeatureFlag,
-  NEXT_PUBLIC_FEATURE_RICH_COMPONENTS: FeatureFlag,
+
+  // Rich component rendering (table/chart/citation/code/callout/media) is ON by default as of
+  // M10 — the P6 `component` SSE event is live. Set NEXT_PUBLIC_FEATURE_RICH_COMPONENTS=false to
+  // keep it dark (each component degrades to a collapsed raw-JSON block inside the M3 code-block).
+  NEXT_PUBLIC_FEATURE_RICH_COMPONENTS: FeatureFlagDefaultOn,
 
   NODE_ENV: z
     .enum(["development", "test", "production"])

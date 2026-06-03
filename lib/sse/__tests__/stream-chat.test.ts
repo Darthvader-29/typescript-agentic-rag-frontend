@@ -1,18 +1,16 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { streamChat } from "@/lib/sse/stream-chat";
+import { streamChat, StreamError } from "@/lib/sse/stream-chat";
 import { streamFromChunks } from "@/test/utils/mock-stream";
 
 function mockFetchOnce(
   body: ReadableStream<Uint8Array> | null,
   ok = true,
-  status = 200
+  status = 200,
+  json: () => Promise<unknown> = async () => ({})
 ) {
   vi.stubGlobal(
     "fetch",
-    vi.fn(
-      async () =>
-        ({ ok, status, body, json: async () => ({}) }) as unknown as Response
-    )
+    vi.fn(async () => ({ ok, status, body, json }) as unknown as Response)
   );
 }
 afterEach(() => vi.unstubAllGlobals());
@@ -105,6 +103,74 @@ describe("streamChat", () => {
       { onError }
     );
     expect(onError).toHaveBeenCalled();
+  });
+
+  it("propagates free_tier_exhausted from a PRE-STREAM HTTP 4xx body (code, not status)", async () => {
+    // Path (a): the freemium guard trips BEFORE the stream opens → 4xx + {detail, code}.
+    mockFetchOnce(null, false, 402, async () => ({
+      detail: "Free tier exhausted",
+      code: "free_tier_exhausted",
+    }));
+    const onError = vi.fn();
+    await streamChat(
+      { message: "q", session_id: "s", web_search_allowed: false },
+      { onError }
+    );
+    const err = onError.mock.calls[0][0];
+    expect(err).toBeInstanceOf(StreamError);
+    expect(err.code).toBe("free_tier_exhausted");
+    expect(err.message).toBe("Free tier exhausted");
+  });
+
+  it("propagates free_tier_exhausted from a TERMINAL error SSE event (code carried)", async () => {
+    // Path (b): the guard trips mid-stream → terminal event: error with {detail, code}.
+    mockFetchOnce(
+      streamFromChunks([
+        'event: token\ndata: {"text": "partial"}\n\n',
+        'event: error\ndata: {"detail": "out of credits", "code": "free_tier_exhausted"}\n\n',
+      ])
+    );
+    const onError = vi.fn();
+    let body = "";
+    await streamChat(
+      { message: "q", session_id: "s", web_search_allowed: false },
+      { onToken: (t) => (body += t), onError }
+    );
+    const err = onError.mock.calls[0][0];
+    expect(err).toBeInstanceOf(StreamError);
+    expect(err.code).toBe("free_tier_exhausted");
+    expect(body).toBe("partial"); // the partial answer is preserved, not discarded
+  });
+
+  it("a generic error event yields a StreamError with no code", async () => {
+    mockFetchOnce(
+      streamFromChunks(['event: error\ndata: {"detail": "boom"}\n\n'])
+    );
+    const onError = vi.fn();
+    await streamChat(
+      { message: "q", session_id: "s", web_search_allowed: false },
+      { onError }
+    );
+    const err = onError.mock.calls[0][0];
+    expect(err).toBeInstanceOf(StreamError);
+    expect(err.code).toBeUndefined();
+  });
+
+  it("drops a status event whose stage is OUT of contract (no onStatus)", async () => {
+    // Contract lock: only routing|retrieving|searching web|synthesizing are valid stages.
+    mockFetchOnce(
+      streamFromChunks([
+        'event: status\ndata: {"stage": "routing"}\n\n',
+        'event: status\ndata: {"stage": "definitely-not-a-stage"}\n\n',
+        'event: done\ndata: {"answer": "ok", "route": "DIRECT"}\n\n',
+      ])
+    );
+    const stages: string[] = [];
+    await streamChat(
+      { message: "q", session_id: "s", web_search_allowed: false },
+      { onStatus: (s) => stages.push(s) }
+    );
+    expect(stages).toEqual(["routing"]); // the bogus stage was dropped, never thrown
   });
 
   it("swallows AbortError as a clean stop (no onError)", async () => {
